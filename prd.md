@@ -1,10 +1,11 @@
 🧩 Product Requirements Document (PRD)
 📌 프로젝트명
-Local RAG AI Assistant using Qwen 2.5 3B + ChromaDB
+Local RAG AI Assistant using EEVE‑Korean‑Instruct‑2.8B‑v1.0 + ChromaDB
 
 🧭 목적
 이 제품은 PDF, TXT, Markdown 등 비정형 학습 자료를 벡터화하여 로컬에 저장하고,
 사용자가 자연어로 질문하면 해당 문서를 기반으로 정확한 답변을 생성하는 로컬 기반 AI 어시스턴트입니다.
+회사에서 사용할것이며 회사의 전략기획팀을 위한 팀전용 소버린 AI 어시스턴트입니다 오프라인상황에서도 사용가능합니다
 
 🎯 주요 기능 (Key Features)
 1. 문서 임베딩
@@ -25,7 +26,7 @@ ChromaDB에서 코사인 유사도로 Top-K 문단 검색 (기본 10개)
 상위 1~3개의 문단만 LLM 입력으로 사용
 
 4. LLM 답변 생성
-KULLM 1 3B (로컬 실행) 기반으로 프롬프트 템플릿에 context 삽입
+EEVE‑Korean‑Instruct‑2.8B‑v1.0 (로컬 실행) 기반으로 프롬프트 템플릿에 context 삽입
 
 System Prompt, 질문, 문단 순으로 구성된 structured prompt 사용
 
@@ -48,7 +49,7 @@ csharp
       ↓
 [Top-3 문단 → LLM Prompt]
       ↓
-[KULLM 1 3B → Answer]
+[EEVE‑Korean‑Instruct‑2.8B‑v1.0 → Answer]
       ↓
 [Return Final Answer]
 ⚙️ 기술 스택
@@ -56,7 +57,7 @@ csharp
 벡터DB	ChromaDB (Persistent mode)
 임베딩 모델	BGE-small-en-v1.5 또는 intfloat/e5-base-v2
 reranker	cross-encoder/ms-marco-MiniLM-L6-en-de-v1
-LLM	KULLM 1 3B (Ollama 또는 직접 로컬 실행)
+LLM	EEVE‑Korean‑Instruct‑2.8B‑v1.0 (Ollama 또는 직접 로컬 실행)
 프롬프트 엔진	Custom, with system-template 구조
 패키징	PyInstaller (Windows), dist/에 .exe 생성
 인터페이스	CLI or Optional FastAPI UI
@@ -112,4 +113,62 @@ LLM 응답이 비어있거나 너무 짧을 경우 fallback 메시지 제공
 CLI 상에서 질문 입력 → 답변 출력 형태
 
 추후 FastAPI 또는 Electron 기반 GUI로 확장 고려
+
+---
+
+### EEVE‑Korean‑Instruct‑2.8B‑v1.0 완전 로컬 세팅 가이드
+
+#### 1. 모델(.gguf) 다운로드
+
+- Hugging Face에서 “EEVE‑Korean‑Instruct‑2.8B‑v1.0”의 .gguf 파일을 다운로드  
+  (예시: [https://huggingface.co/eeve/EEVE-Korean-Instruct-2.8B-v1.0-GGUF](https://huggingface.co/eeve/EEVE-Korean-Instruct-2.8B-v1.0-GGUF))
+- 원하는 quantization(예: q4_0, q4_K_M 등) 선택
+- 다운로드한 .gguf 파일을 `models/` 폴더에 복사
+
+#### 2. llama-cpp-python 설치
+
+```bash
+pip install llama-cpp-python
+```
+
+#### 3. config.yaml 수정
+
+```yaml
+llm_model_path: './models/EEVE-Korean-Instruct-2.8B-v1.0-q4_0.gguf'  # 실제 파일명에 맞게
+```
+
+#### 4. llm_runner.py 예시 코드
+
+```python
+from llama_cpp import Llama
+
+class LLMRunner:
+    """
+    EEVE-Korean-Instruct-2.8B-v1.0 .gguf 모델을 llama.cpp로 로컬 추론하는 클래스
+    """
+    def __init__(self, model_path: str):
+        self.model_path = model_path
+        self.llm = Llama(model_path=model_path, n_ctx=2048)  # context window는 필요시 조정
+
+    def generate_answer(self, prompt: str) -> str:
+        try:
+            output = self.llm(prompt, max_tokens=512, stop=["</s>"])
+            return output["choices"][0]["text"].strip()
+        except Exception as e:
+            print(f"[Error] LLM 추론 실패: {e}")
+            return ""
+```
+
+---
+
+### 요약
+
+- .gguf 모델을 models/에 준비
+- llama-cpp-python 설치
+- config.yaml, llm_runner.py 수정
+
+---
+
+**모델 다운로드/설치가 끝나면 “완료”라고 답해 주세요.**  
+(이후 end-to-end 파이프라인 테스트, 추가 코드 보완 등 바로 도와드릴 수 있습니다!)
 
