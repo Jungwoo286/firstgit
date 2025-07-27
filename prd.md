@@ -1,6 +1,6 @@
 🧩 Product Requirements Document (PRD)
 📌 프로젝트명
-Local RAG AI Assistant using EEVE‑Korean‑Instruct‑2.8B‑v1.0 + ChromaDB
+Local RAG AI Assistant using EEVE‑Korean‑Instruct‑2.8B‑v1.0 + ChromaDB + llama.cpp
 
 🧭 목적
 이 제품은 PDF, TXT, Markdown 등 비정형 학습 자료를 벡터화하여 로컬에 저장하고,
@@ -26,19 +26,17 @@ ChromaDB에서 코사인 유사도로 Top-K 문단 검색 (기본 10개)
 상위 1~3개의 문단만 LLM 입력으로 사용
 
 4. LLM 답변 생성
-EEVE‑Korean‑Instruct‑2.8B‑v1.0 (로컬 실행) 기반으로 프롬프트 템플릿에 context 삽입
+EEVE‑Korean‑Instruct‑2.8B‑v1.0 (llama.cpp + GGUF 로컬 실행) 기반으로 프롬프트 템플릿에 context 삽입
 
 System Prompt, 질문, 문단 순으로 구성된 structured prompt 사용
 
-5. 실행파일화 및 배포
-PyInstaller 또는 Nuitka 기반으로 전체 시스템을 .exe 실행파일로 패키징
+5. 경량화된 배포 패키지
+llama-cpp-python 기반으로 최적화된 실행 환경 구성
 
 로컬에서 인터넷 연결 없이 동작 (벡터 검색 및 추론 모두 오프라인)
 
 🏗️ 시스템 구성도
-csharp
-복사
-편집
+```
 [User Question]
       ↓
 [Embedding: Question → Vector]
@@ -49,17 +47,19 @@ csharp
       ↓
 [Top-3 문단 → LLM Prompt]
       ↓
-[EEVE‑Korean‑Instruct‑2.8B‑v1.0 → Answer]
+[EEVE‑Korean‑Instruct‑2.8B‑v1.0 (llama.cpp) → Answer]
       ↓
 [Return Final Answer]
+```
+
 ⚙️ 기술 스택
 항목	기술
 벡터DB	ChromaDB (Persistent mode)
 임베딩 모델	BGE-small-en-v1.5 또는 intfloat/e5-base-v2
 reranker	cross-encoder/ms-marco-MiniLM-L6-en-de-v1
-LLM	EEVE‑Korean‑Instruct‑2.8B‑v1.0 (Ollama 또는 직접 로컬 실행)
+LLM	EEVE‑Korean‑Instruct‑2.8B‑v1.0 (llama.cpp + GGUF)
 프롬프트 엔진	Custom, with system-template 구조
-패키징	PyInstaller (Windows), dist/에 .exe 생성
+패키징	llama-cpp-python + 경량화된 배포 패키지
 인터페이스	CLI or Optional FastAPI UI
 설정 관리	.env, config.yaml
 
@@ -70,16 +70,14 @@ LLM	EEVE‑Korean‑Instruct‑2.8B‑v1.0 (Ollama 또는 직접 로컬 실행)
 질문: "올해 실적 요약 알려줘"	문서 내 KPI 요약 문단 기반으로 응답
 
 🧱 코드 구성
-bash
-복사
-편집
+```
 project/
 │
 ├── main.py                  # 전체 파이프라인 제어
 ├── embedder.py             # 문서 임베딩
 ├── retriever.py            # 유사도 기반 검색
 ├── reranker.py             # 문서 정렬
-├── llm_runner.py           # LLM 프롬프트 + 응답 생성
+├── llm_runner.py           # LLM 프롬프트 + 응답 생성 (llama.cpp)
 ├── prompt_template.py      # 프롬프트 템플릿 관리
 ├── utils/                  # 공통 유틸 함수
 │   └── file_io.py, path.py
@@ -87,8 +85,10 @@ project/
 ├── config.yaml             # 경로/모델명 설정
 ├── .env                    # 민감 정보 또는 실행 변수
 ├── db/                     # ChromaDB 벡터 저장
-├── models/                 # 임베딩 및 reranker 모델 저장 위치
-├── dist/                   # 실행파일(.exe) 생성 위치
+├── models/                 # 임베딩, reranker, GGUF 모델 저장 위치
+├── dist/                   # 배포 패키지 생성 위치
+```
+
 ⚠️ 예외 처리 및 안정성 설계
 ChromaDB가 없거나 index가 비어있을 경우 friendly error 출력
 
@@ -108,7 +108,7 @@ LLM 응답이 비어있거나 너무 짧을 경우 fallback 메시지 제공
 코드를 작성한 후 내부적으로 에러 가능성과 구조적 개선 여부를 체크할 것
 
 🚀 릴리즈 및 실행 방식
-최종 사용자는 .exe 실행만으로 실행 가능
+최종 사용자는 배포 패키지 실행만으로 실행 가능
 
 CLI 상에서 질문 입력 → 답변 출력 형태
 
@@ -116,43 +116,47 @@ CLI 상에서 질문 입력 → 답변 출력 형태
 
 ---
 
-### EEVE‑Korean‑Instruct‑2.8B‑v1.0 완전 로컬 세팅 가이드
+### EEVE‑Korean‑Instruct‑2.8B‑v1.0 GGUF 변환 및 llama.cpp 세팅 가이드
 
-#### 1. 모델(.gguf) 다운로드
-
-- Hugging Face에서 “EEVE‑Korean‑Instruct‑2.8B‑v1.0”의 .gguf 파일을 다운로드  
-  (예시: [https://huggingface.co/eeve/EEVE-Korean-Instruct-2.8B-v1.0-GGUF](https://huggingface.co/eeve/EEVE-Korean-Instruct-2.8B-v1.0-GGUF))
-- 원하는 quantization(예: q4_0, q4_K_M 등) 선택
-- 다운로드한 .gguf 파일을 `models/` 폴더에 복사
-
-#### 2. llama-cpp-python 설치
-
+#### 1. GGUF 변환
 ```bash
+# llama-cpp-python 설치
 pip install llama-cpp-python
+
+# GGUF 변환
+python -m llama_cpp.convert_llama_weights_to_gguf ./EEVE-Korean-Instruct-2.8B-v1.0 --outfile ./models/eeve-korean-2.8b.gguf
 ```
 
-#### 3. config.yaml 수정
-
+#### 2. config.yaml 수정
 ```yaml
-llm_model_path: './models/EEVE-Korean-Instruct-2.8B-v1.0-q4_0.gguf'  # 실제 파일명에 맞게
+llm_model_path: './models/eeve-korean-2.8b.gguf'
 ```
 
-#### 4. llm_runner.py 예시 코드
-
+#### 3. llm_runner.py 예시 코드
 ```python
 from llama_cpp import Llama
 
 class LLMRunner:
     """
-    EEVE-Korean-Instruct-2.8B-v1.0 .gguf 모델을 llama.cpp로 로컬 추론하는 클래스
+    EEVE-Korean-Instruct-2.8B-v1.0 GGUF 모델을 llama.cpp로 로컬 추론하는 클래스
     """
     def __init__(self, model_path: str):
         self.model_path = model_path
-        self.llm = Llama(model_path=model_path, n_ctx=2048)  # context window는 필요시 조정
+        self.llm = Llama(
+            model_path=model_path, 
+            n_ctx=2048,
+            n_threads=4,  # CPU 스레드 수 조정
+            n_gpu_layers=0  # GPU 사용 시 1 이상으로 설정
+        )
 
     def generate_answer(self, prompt: str) -> str:
         try:
-            output = self.llm(prompt, max_tokens=512, stop=["</s>"])
+            output = self.llm(
+                prompt, 
+                max_tokens=512, 
+                stop=["</s>", "\n\n"],
+                temperature=0.7
+            )
             return output["choices"][0]["text"].strip()
         except Exception as e:
             print(f"[Error] LLM 추론 실패: {e}")
@@ -161,14 +165,21 @@ class LLMRunner:
 
 ---
 
-### 요약
+### 배포 패키지 구성
+```
+rag-app-portable/
+├── llama-cpp-python/       # 최적화된 llama-cpp-python
+├── models/                 # GGUF 모델 + 임베딩 모델
+├── app/                    # 애플리케이션 코드
+├── run.bat                 # Windows 실행
+├── run.sh                  # Linux/Mac 실행
+└── README.txt              # 사용법
+```
 
-- .gguf 모델을 models/에 준비
-- llama-cpp-python 설치
-- config.yaml, llm_runner.py 수정
+**예상 배포 크기: ~1.6GB** (기존 7GB 대비 77% 감소)
 
 ---
 
-**모델 다운로드/설치가 끝나면 “완료”라고 답해 주세요.**  
+**모델 변환이 끝나면 "완료"라고 답해 주세요.**  
 (이후 end-to-end 파이프라인 테스트, 추가 코드 보완 등 바로 도와드릴 수 있습니다!)
 
